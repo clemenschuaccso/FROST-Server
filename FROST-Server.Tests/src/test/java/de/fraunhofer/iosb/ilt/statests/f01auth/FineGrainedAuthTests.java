@@ -30,7 +30,6 @@ import static de.fraunhofer.iosb.ilt.statests.util.EntityUtils.testFilterResults
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import de.fraunhofer.iosb.ilt.frostclient.SensorThingsService;
 import de.fraunhofer.iosb.ilt.frostclient.dao.Dao;
 import de.fraunhofer.iosb.ilt.frostclient.exception.ServiceFailureException;
@@ -64,7 +63,7 @@ import java.util.regex.Pattern;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.json.JSONException;
+import org.geojson.Point;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
@@ -131,7 +130,8 @@ public abstract class FineGrainedAuthTests extends AbstractTestClass {
     }
 
     private static final SensorThingsSensingV11 mdlSensing = new SensorThingsSensingV11();
-    private static final SensorThingsUserModel mdlUsers = new SensorThingsUserModel(mdlSensing);
+    private static final SensorThingsUserModel mdlUsers = new SensorThingsUserModel();
+    private static final SensorThingsService baseService = new SensorThingsService(mdlSensing, mdlUsers);
 
     private static final List<Entity> THINGS = new ArrayList<>();
     private static final List<Entity> LOCATIONS = new ArrayList<>();
@@ -198,7 +198,7 @@ public abstract class FineGrainedAuthTests extends AbstractTestClass {
 
             String batchPostData = IOUtils.resourceToString("finegrainedsecurity/dataBatchPost.json", StandardCharsets.UTF_8, FineGrainedAuthTests.class.getClassLoader());
             String response = postBatch(batchPostData);
-            BatchResponseJson result = new ObjectMapper().readValue(response, BatchResponseJson.class);
+            BatchResponseJson result = Utils.MAPPER.readValue(response, BatchResponseJson.class);
             for (BatchResponseJson.ResponsePart part : result.getResponses()) {
                 final String location = part.getLocation();
                 Object[] pk = pkFromSelfLink(location);
@@ -263,7 +263,7 @@ public abstract class FineGrainedAuthTests extends AbstractTestClass {
 
     private SensorThingsService createService() {
         try {
-            return new SensorThingsService(mdlUsers.getModelRegistry())
+            return new SensorThingsService(baseService.getModelRegistry())
                     .setEndpoint(new URL(serverSettings.getServiceUrl(version)));
         } catch (MalformedURLException ex) {
             throw new IllegalArgumentException("Serversettings contains malformed URL.", ex);
@@ -272,15 +272,9 @@ public abstract class FineGrainedAuthTests extends AbstractTestClass {
 
     private String postBatch(String body) {
         String urlString = serverSettings.getServiceUrl(version) + "/$batch";
-        try {
-            HTTPMethods.HttpResponse httpResponse = HTTPMethods.doPost(serviceAdmin.getHttpClient(), urlString, body, "application/json");
-            assertEquals(200, httpResponse.code, "Batch response should be 200");
-            return httpResponse.response;
-        } catch (JSONException e) {
-            LOGGER.error("Exception: ", e);
-            fail("An Exception occurred during testing: " + e.getMessage());
-            return null;
-        }
+        HTTPMethods.HttpResponse httpResponse = HTTPMethods.doPost(serviceAdmin.getHttpClient(), urlString, body, "application/json");
+        assertEquals(200, httpResponse.code, "Batch response should be 200");
+        return httpResponse.response;
     }
 
     @Test
@@ -567,6 +561,29 @@ public abstract class FineGrainedAuthTests extends AbstractTestClass {
         fetchForCode(ADMIN_P2, serviceAdminProject2, link, 404);
         fetchForCode(OBS_CREATE_P1, serviceObsCreaterProject1, link, 200);
         fetchForCode(OBS_CREATE_P2, serviceObsCreaterProject2, link, 404);
+    }
+
+    @Test
+    void test_08e_ObservationCreate() {
+        LOGGER.info("  test_08e_ObservationCreate");
+        EntityCreator creator = (user) -> mdlSensing.newObservation(user + " Observation", DATASTREAMS.get(0));
+
+        createForFail(OBS_CREATE_P2, serviceObsCreaterProject2, creator, serviceAdmin.dao(mdlSensing.etObservation), OBSERVATIONS, H403);
+        createForOk(OBS_CREATE_P1, serviceObsCreaterProject1, creator, serviceAdmin.dao(mdlSensing.etObservation), OBSERVATIONS);
+    }
+
+    @Test
+    void test_08f_ObservationCreateNewFoi() throws ServiceFailureException {
+        LOGGER.info("  test_08f_ObservationCreateNewFoi");
+        // Create a new Location for Thing 1, so a new FoI must be generated.
+        Entity newLocation = mdlSensing.newLocation("testFoiGeneration", "Testing if FoI generation works", new Point(10.0, 49.0))
+                .addNavigationEntity(mdlSensing.npLocationThings, THINGS.get(0));
+        serviceAdmin.create(newLocation);
+
+        EntityCreator creator = (user) -> mdlSensing.newObservation(user + " Observation", DATASTREAMS.get(0));
+
+        createForFail(OBS_CREATE_P2, serviceObsCreaterProject2, creator, serviceAdmin.dao(mdlSensing.etObservation), OBSERVATIONS, H403);
+        createForOk(OBS_CREATE_P1, serviceObsCreaterProject1, creator, serviceAdmin.dao(mdlSensing.etObservation), OBSERVATIONS);
     }
 
     @Test

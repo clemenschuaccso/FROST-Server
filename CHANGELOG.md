@@ -1,6 +1,15 @@
 # Changelog
 
-## Development version 2.2.0
+## Development version 2.3.0
+
+**New Features**
+* Added support for headers in JSON-Batch requets, enabling JSON-Patch requests in JSON-Batch requests.
+
+**Internal changes & Bugfixes**
+* Fixed #1754: resultTime/phenomenonTime mixup in MultiDatastream
+
+
+## Release version 2.2.0
 
 **New Features**
 * Improved configuration options for logging.
@@ -27,6 +36,7 @@
 * Fixed unknown version giving 200 instead of 404.
 * Fixed JSON-Patch that changed nothing giving an error back.
 * Fixed memory leak when creating Entities using MQTT.
+* Improved internal message bus when MQTT is not in use.
 
 
 ## Release version 2.1.0
