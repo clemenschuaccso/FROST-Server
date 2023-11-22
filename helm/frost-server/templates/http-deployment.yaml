@@ -34,6 +34,18 @@ spec:
           ports:
             - name: tomcat
               containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /{{ if .Values.frost.http.urlSubPath }}{{ .Values.frost.http.urlSubPath }}{{ end }}
+              port: tomcat
+            failureThreshold: 1
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /{{ if .Values.frost.http.urlSubPath }}{{ .Values.frost.http.urlSubPath }}{{ end }}
+              port: tomcat
+            failureThreshold: 30
+            periodSeconds: 10
           resources:
           {{- toYaml .Values.frost.http.resources | nindent 12 }}
           env:
